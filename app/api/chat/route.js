@@ -33,28 +33,43 @@ export async function POST(request) {
       input: question,
     });
 
-    const { data: vectorMatches, error: vectorError } = await supabase.rpc("match_document_chunks", {
+    const rpcOptions = {
       query_embedding: queryEmbedding.data[0].embedding,
       match_count: 8,
-      target_document_id: documentId || null,
-    });
+    };
+    if (documentId) {
+      rpcOptions.target_document_id = documentId;
+    }
+
+    let vectorMatches = [];
+    let vectorError = null;
+
+    const vectorAttempt = await supabase.rpc("match_document_chunks", rpcOptions);
+    if (vectorAttempt.error) {
+      const fallbackAttempt = await supabase.rpc("match_document_chunks", {
+        query_embedding: queryEmbedding.data[0].embedding,
+        match_count: 8,
+      });
+
+      if (fallbackAttempt.error) {
+        vectorError = fallbackAttempt.error;
+      } else {
+        vectorMatches = fallbackAttempt.data || [];
+      }
+    } else {
+      vectorMatches = vectorAttempt.data || [];
+    }
 
     if (vectorError) {
       return Response.json({ error: vectorError.message }, { status: 500 });
     }
 
-    const keywordMatches = await supabase.rpc("search_document_chunks", {
-      search_text: question,
-      match_count: 8,
-      target_document_id: documentId || null,
-    });
-
-    if (keywordMatches.error) {
-      return Response.json({ error: keywordMatches.error.message }, { status: 500 });
+    if (documentId) {
+      vectorMatches = vectorMatches.filter((match) => match.document_id === documentId);
     }
 
     const combined = new Map();
-    for (const match of [...(vectorMatches || []), ...(keywordMatches.data || [])]) {
+    for (const match of vectorMatches) {
       if (!combined.has(match.id)) {
         combined.set(match.id, match);
       }
