@@ -17,7 +17,7 @@ function getOpenAI() {
 
 export async function POST(request) {
   try {
-    const { question } = await request.json();
+    const { question, documentId } = await request.json();
 
     if (!question?.trim()) {
       return Response.json({ error: "Question is required." }, { status: 400 });
@@ -33,16 +33,36 @@ export async function POST(request) {
       input: question,
     });
 
-    const { data: matches, error } = await supabase.rpc("match_document_chunks", {
+    const { data: vectorMatches, error: vectorError } = await supabase.rpc("match_document_chunks", {
       query_embedding: queryEmbedding.data[0].embedding,
-      match_count: 5,
+      match_count: 8,
+      target_document_id: documentId || null,
     });
 
-    if (error) {
-      return Response.json({ error: error.message }, { status: 500 });
+    if (vectorError) {
+      return Response.json({ error: vectorError.message }, { status: 500 });
     }
 
-    const context = (matches || [])
+    const keywordMatches = await supabase.rpc("search_document_chunks", {
+      search_text: question,
+      match_count: 8,
+      target_document_id: documentId || null,
+    });
+
+    if (keywordMatches.error) {
+      return Response.json({ error: keywordMatches.error.message }, { status: 500 });
+    }
+
+    const combined = new Map();
+    for (const match of [...(vectorMatches || []), ...(keywordMatches.data || [])]) {
+      if (!combined.has(match.id)) {
+        combined.set(match.id, match);
+      }
+    }
+
+    const matches = Array.from(combined.values()).slice(0, 8);
+
+    const context = matches
       .map(
         (match, index) =>
           `[${index + 1}] File: ${match.filename}\nChunk: ${match.content}`,
@@ -55,7 +75,7 @@ export async function POST(request) {
         {
           role: "system",
           content:
-            "You are an enterprise document assistant. Answer only using the provided document context. If the context is insufficient, say so clearly.",
+            "You are an enterprise document assistant. Use the provided document context to answer clearly and directly. If the context only partially answers the question, say what is known and what is missing instead of refusing too early.",
         },
         {
           role: "user",
@@ -66,7 +86,7 @@ export async function POST(request) {
 
     return Response.json({
       answer: completion.output_text || "No answer generated.",
-      sources: matches || [],
+      sources: matches,
     });
   } catch (error) {
     return Response.json(

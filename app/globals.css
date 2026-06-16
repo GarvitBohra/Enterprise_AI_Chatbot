@@ -334,6 +334,73 @@ h1 {
   margin-top: 18px;
 }
 
+.documents-card {
+  position: relative;
+  z-index: 1;
+  margin-top: 18px;
+  padding: 26px;
+  border-radius: 28px;
+  border: 1px solid var(--surface-border);
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow: var(--shadow);
+}
+
+.documents-list {
+  list-style: none;
+  padding: 0;
+  margin: 16px 0 0;
+  display: grid;
+  gap: 12px;
+}
+
+.documents-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 20px;
+  padding: 14px 16px;
+}
+
+.documents-list li.selected-doc {
+  border-color: rgba(110, 231, 255, 0.45);
+  background: rgba(110, 231, 255, 0.08);
+}
+
+.doc-button {
+  all: unset;
+  display: grid;
+  gap: 4px;
+  cursor: pointer;
+  flex: 1;
+}
+
+.doc-button strong {
+  color: var(--text);
+}
+
+.documents-list strong {
+  display: block;
+}
+
+.documents-list span {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.documents-list .empty-state {
+  color: var(--muted);
+  justify-content: flex-start;
+}
+
+.selected-note {
+  margin: 12px 0 0;
+  color: var(--accent);
+  font-size: 0.92rem;
+}
+
 .card-head {
   display: flex;
   justify-content: space-between;

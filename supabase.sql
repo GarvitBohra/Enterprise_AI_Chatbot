@@ -31,7 +31,8 @@ with (lists = 100);
 
 create or replace function public.match_document_chunks(
   query_embedding vector(1536),
-  match_count int default 5
+  match_count int default 5,
+  target_document_id uuid default null
 )
 returns table (
   id uuid,
@@ -53,7 +54,43 @@ as $$
     1 - (dc.embedding <=> query_embedding) as similarity
   from public.document_chunks dc
   join public.documents d on d.id = dc.document_id
+  where target_document_id is null or dc.document_id = target_document_id
   order by dc.embedding <=> query_embedding
+  limit match_count;
+$$;
+
+create or replace function public.search_document_chunks(
+  search_text text,
+  match_count int default 5,
+  target_document_id uuid default null
+)
+returns table (
+  id uuid,
+  document_id uuid,
+  chunk_index int,
+  content text,
+  filename text,
+  similarity float
+)
+language sql
+stable
+as $$
+  select
+    dc.id,
+    dc.document_id,
+    dc.chunk_index,
+    dc.content,
+    d.filename,
+    ts_rank(
+      to_tsvector('english', coalesce(dc.content, '') || ' ' || coalesce(d.filename, '') || ' ' || coalesce(d.raw_text, '')),
+      websearch_to_tsquery('english', search_text)
+    ) as similarity
+  from public.document_chunks dc
+  join public.documents d on d.id = dc.document_id
+  where (target_document_id is null or dc.document_id = target_document_id)
+    and to_tsvector('english', coalesce(dc.content, '') || ' ' || coalesce(d.filename, '') || ' ' || coalesce(d.raw_text, ''))
+        @@ websearch_to_tsquery('english', search_text)
+  order by similarity desc
   limit match_count;
 $$;
 
