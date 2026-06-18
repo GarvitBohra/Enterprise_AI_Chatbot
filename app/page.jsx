@@ -12,6 +12,7 @@ export default function HomePage() {
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [chatting, setChatting] = useState(false);
+  const [documents, setDocuments] = useState([]);
   const [selectedDocumentId, setSelectedDocumentId] = useState("");
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
@@ -30,6 +31,8 @@ export default function HomePage() {
         if (!response.ok) throw new Error(data.error || "Failed to load documents");
         if (!ignore) {
           const nextDocuments = data.documents || [];
+          setDocuments(nextDocuments);
+
           const savedDocumentId =
             window.localStorage.getItem("selectedDocumentId") || "";
           if (
@@ -81,10 +84,18 @@ export default function HomePage() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Upload failed");
 
-      setStatus("Saved and indexed in Supabase.");
+      setStatus(`Indexed ${data.filename}`);
       setFile(null);
-      if (data.document_id) {
-        setSelectedDocumentId(data.document_id);
+      const listResponse = await fetch("/api/documents");
+      const listData = await listResponse.json();
+      if (listResponse.ok) {
+        const nextDocuments = listData.documents || [];
+        setDocuments(nextDocuments);
+        if (data.document_id) {
+          setSelectedDocumentId(data.document_id);
+        } else if (nextDocuments.length > 0) {
+          setSelectedDocumentId(nextDocuments[0].id);
+        }
       }
     } catch (err) {
       setError(err.message);
@@ -182,6 +193,50 @@ export default function HomePage() {
         </aside>
       </section>
 
+      <section className="card documents-card">
+        <div className="card-head">
+          <div>
+            <p className="section-label">Supabase storage</p>
+            <h3>Uploaded documents</h3>
+          </div>
+          <span className="mini-badge">{documents.length} saved</span>
+        </div>
+        <p className="muted">
+          Every uploaded PDF is stored in Supabase and stays searchable in future
+          questions.
+        </p>
+        <ul className="documents-list">
+          {documents.length > 0 ? (
+            documents.map((doc) => (
+              <li
+                key={doc.id}
+                className={selectedDocumentId === doc.id ? "selected-doc" : ""}
+              >
+                <button
+                  type="button"
+                  className="doc-button"
+                  onClick={() => setSelectedDocumentId(doc.id)}
+                >
+                  <strong>{doc.filename}</strong>
+                  <span>
+                    {doc.mime_type || "unknown type"} •{" "}
+                    {new Date(doc.created_at).toLocaleString()}
+                  </span>
+                </button>
+                <span>
+                  {selectedDocumentId === doc.id ? "Selected for chat" : "Saved in Supabase"}
+                </span>
+              </li>
+            ))
+          ) : (
+            <li className="empty-state">
+              No documents uploaded yet. Once you upload a PDF, it will appear
+              here and stay available for retrieval.
+            </li>
+          )}
+        </ul>
+      </section>
+
       <section className="control-grid">
         <article className="card control-card">
           <div className="card-head">
@@ -226,10 +281,16 @@ export default function HomePage() {
             then passed to OpenAI with the best stored document context. You do
             not need to upload again for every question.
           </p>
-          <p className="selected-note">
-            Chat uses the document saved in Supabase, so you can keep asking
-            without uploading again.
-          </p>
+          {documents.length > 0 ? (
+            <p className="selected-note">
+              Chat is using{" "}
+              <strong>
+                {documents.find((doc) => doc.id === selectedDocumentId)?.filename ||
+                  "your uploaded documents"}
+              </strong>
+              .
+            </p>
+          ) : null}
           <form onSubmit={handleChat} className="stack">
             <textarea
               rows={6}
@@ -276,7 +337,7 @@ export default function HomePage() {
                 {sources.map((source, index) => (
                   <li key={`${source.document_id}-${index}`}>
                     <div className="source-meta">
-                      <strong>Source {index + 1}</strong>
+                      <strong>{source.filename}</strong>
                       <span>{Math.round((source.similarity ?? 0) * 100)}% match</span>
                     </div>
                     <p>{source.content}</p>
